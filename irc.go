@@ -43,7 +43,6 @@ func (i *Irc) WriteToChannel(content string) {
 }
 
 func parseIrcMsg(e *irc.Event, i *Irc) {
-	user := e.Nick
 	content := e.Arguments[1]
 	if strings.HasPrefix(content, "!add") {
 		add(e, i, content[5:])
@@ -74,7 +73,7 @@ func search(i *Irc, q string) {
 		i.WriteToChannel(err.Error())
 	} else {
 		fmt.Println(results)
-		i.WriteToChannel(results)
+		i.WriteToChannel(results.String())
 	}
 }
 
