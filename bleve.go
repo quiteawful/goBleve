@@ -1,10 +1,6 @@
 package main
 
-import (
-	"fmt"
-
-	"github.com/blevesearch/bleve"
-)
+import "github.com/blevesearch/bleve"
 
 type Bleve struct {
 	CustInd bleve.Index
@@ -15,10 +11,12 @@ func (b *Bleve) New(name string) {
 	mapping := bleve.NewIndexMapping()
 	b.CustInd, err = bleve.New(name, mapping)
 	if err != nil {
-		fmt.Println(err.Error())
-		b.CustInd, _ = bleve.Open(name)
+		if err == bleve.ErrorIndexPathExists {
+			b.CustInd, _ = bleve.Open(name)
+		} else {
+			panic(err.Error())
+		}
 	}
-
 }
 
 func (b *Bleve) Add(id, data interface{}) error {
