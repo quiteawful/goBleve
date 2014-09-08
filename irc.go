@@ -3,10 +3,14 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/thoj/go-ircevent"
 )
+
+var urlregex = regexp.MustCompile(`((([A-Za-z]{3,9}:(?:\/\/)?)(?:[-;:&=\+\$,\w]+@)?[A-Za-z0-9.-]+|(?:www.|[-;:&=\+\$,\w]+@)[A-Za-z0-9.-]+)((?:\/[\+~%\/.\w-_]*)?\??(?:[-\+=&;%@.\w_]*)#?(?:[\w]*))?)`)
 
 type Irc struct {
 	Con      *irc.Connection
@@ -18,7 +22,7 @@ type Irc struct {
 
 func (i *Irc) Run() {
 
-	i.Con = irc.IRC("test1", "test2")
+	i.Con = irc.IRC("test1a", "test2a")
 	i.Con.VerboseCallbackHandler = false
 	i.Con.UseTLS = true
 	if strings.HasPrefix(i.Port, "+") {
@@ -44,6 +48,13 @@ func (i *Irc) WriteToChannel(content string) {
 
 func parseIrcMsg(e *irc.Event, i *Irc) {
 	content := e.Arguments[1]
+
+	if urlregex.MatchString(content) {
+		urlString := urlregex.FindStringSubmatch(content)[0]
+		add(e, i, urlString)
+		return
+	}
+
 	if strings.HasPrefix(content, "!add") {
 		add(e, i, content[5:])
 
@@ -54,12 +65,9 @@ func parseIrcMsg(e *irc.Event, i *Irc) {
 }
 
 func add(e *irc.Event, i *Irc, q string) {
-	data := struct {
-		Name string
-	}{
-		Name: q,
-	}
-	err := i.Db.Add("id", data)
+
+	link := IRCLink{e.Nick, time.Now(), q, "blablubcontent"}
+	err := i.Db.Add(link.URL, link)
 	if err != nil {
 		i.WriteToChannel(err.Error())
 	} else {

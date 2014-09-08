@@ -1,6 +1,14 @@
 package main
 
 import "github.com/blevesearch/bleve"
+import "time"
+
+type IRCLink struct {
+	Poster  string
+	Date    time.Time
+	URL     string
+	Content string
+}
 
 type Bleve struct {
 	CustInd bleve.Index
@@ -19,13 +27,12 @@ func (b *Bleve) New(name string) {
 	}
 }
 
-func (b *Bleve) Add(id, data interface{}) error {
-	return b.CustInd.Index("id", data)
+func (b *Bleve) Add(id string, data interface{}) error {
+	return b.CustInd.Index(id, data)
 }
 
 func (b *Bleve) Query(query string) (*bleve.SearchResult, error) {
-	q := bleve.NewMatchQuery(query)
+	q := bleve.NewQueryStringQuery(query) // vielleicht hilfts ja.
 	s := bleve.NewSearchRequest(q)
 	return b.CustInd.Search(s)
-
 }
