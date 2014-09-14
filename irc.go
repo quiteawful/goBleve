@@ -2,11 +2,15 @@ package main
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
+	"log"
+	"os/exec"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/blevesearch/bleve"
 	"github.com/thoj/go-ircevent"
 )
 
@@ -22,7 +26,7 @@ type Irc struct {
 
 func (i *Irc) Run() {
 
-	i.Con = irc.IRC("test1a", "test2a")
+	i.Con = irc.IRC("linkbot", "bowtsie")
 	i.Con.VerboseCallbackHandler = false
 	i.Con.UseTLS = true
 	if strings.HasPrefix(i.Port, "+") {
@@ -48,43 +52,102 @@ func (i *Irc) WriteToChannel(content string) {
 
 func parseIrcMsg(e *irc.Event, i *Irc) {
 	content := e.Arguments[1]
-
+	if strings.HasPrefix(content, "!linkbot") {
+		if len(content) <= 8 {
+			i.printHelp()
+		} else {
+			searchDb(i, content[9:])
+			return
+		}
+	}
 	if urlregex.MatchString(content) {
 		urlString := urlregex.FindStringSubmatch(content)[0]
 		add(e, i, urlString)
 		return
 	}
+}
 
-	if strings.HasPrefix(content, "!add") {
-		add(e, i, content[5:])
-
+func (i *Irc) printHelp() {
+	i.WriteToChannel("Linkbot!")
+	i.WriteToChannel("!linkbot --nick <nick>")
+	i.WriteToChannel("!linkbot --url <teil von ner url>")
+	i.WriteToChannel("!linkbot --content <irgendwas, was auf der seite stand>")
+}
+func parseSearchRequest(i *Irc, content string) (*bleve.SearchResult, error) {
+	if strings.HasPrefix(content, "--url") {
+		if len(content) <= 6 {
+			return nil, errors.New("und wo ist die URL?")
+		}
+		return i.Db.Query(content[6:], "Id")
 	}
-	if strings.HasPrefix(content, "!search") {
-		search(i, content[8:])
+	if strings.HasPrefix(content, "--nick") {
+		if len(content) <= 7 {
+			return nil, errors.New("und wo ist der nick?")
+		}
+		return i.Db.Query(content[7:], "Poster")
 	}
+	if strings.HasPrefix(content, "--content") {
+		if len(content) <= 10 {
+			return nil, errors.New("und wo ist der content?")
+		}
+		return i.Db.Query(content[10:], "Content")
+	}
+	return nil, errors.New("wa?")
 }
 
 func add(e *irc.Event, i *Irc, q string) {
 
-	link := IRCLink{e.Nick, time.Now(), q, "blablubcontent"}
-	err := i.Db.Add(link.URL, link)
+	content, err := getLinkContent(q)
+	if err != nil {
+		i.WriteToChannel(err.Error())
+		return
+	}
+	link := IRCLink{e.Nick, q, content, time.Now().Format(time.RFC822)}
+	err = i.Db.Add(link.Id, link)
 	if err != nil {
 		i.WriteToChannel(err.Error())
 	} else {
-		i.WriteToChannel("OK")
+		log.Println("OK")
 	}
 }
 
-func search(i *Irc, q string) {
-	results, err := i.Db.Query(q)
+func getLinkContent(link string) (string, error) {
+	out, err := exec.Command("lynx", "--dump", "-nolist", link).Output()
+	if err != nil {
+		log.Println(err.Error())
+		return "", err
+	}
+	return string(out[:]), nil
+}
+
+func searchDb(i *Irc, query string) {
+	maxResults := uint64(5)
+	results, err := parseSearchRequest(i, query)
 	if err != nil {
 		i.WriteToChannel(err.Error())
+		i.printHelp()
+		return
 	} else {
 		fmt.Println(results)
-		i.WriteToChannel(results.String())
+		if results.String() == "No matches" {
+			i.WriteToChannel(results.String())
+		} else {
+			if results.Total < maxResults {
+				maxResults = results.Total
+			}
+			for j := uint64(0); j < maxResults; j++ {
+				linkstruct, err := i.Db.GetContentFromDb(results.Hits[j])
+				if err != nil {
+					log.Println(err.Error())
+					i.WriteToChannel(err.Error())
+					return
+				} else {
+					i.WriteToChannel(fmt.Sprintf("%s@%s: %s", linkstruct.Poster, linkstruct.Date, linkstruct.Id))
+				}
+			}
+		}
 	}
 }
-
 func isMod(user string) bool {
 	mods := []string{"marduk", "soda", "aimless", "nut"}
 	for _, v := range mods {
