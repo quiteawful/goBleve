@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -16,6 +17,8 @@ import (
 
 var urlregex = regexp.MustCompile(`((([A-Za-z]{3,9}:(?:\/\/)?)(?:[-;:&=\+\$,\w]+@)?[A-Za-z0-9.-]+|(?:www.|[-;:&=\+\$,\w]+@)[A-Za-z0-9.-]+)((?:\/[\+~%\/.\w-_]*)?\??(?:[-\+=&;%@.\w_]*)#?(?:[\w]*))?)`)
 var mimeregex = regexp.MustCompile(`(image|video)/(png|gif|webm|jpeg|jpg|avi)`)
+
+var mimetypes []string = []string{"image/png", "image/gif", "image/webm", "image/jpeg", "image/jpg", "video/avi"}
 
 type Irc struct {
 	Con      *irc.Connection
@@ -114,10 +117,13 @@ func add(e *irc.Event, i *Irc, q string) {
 
 func getLinkContent(link string) (string, error) {
 
-	if !checkMimeType(link) {
+	//if !checkMimeType(link) {
+	//	return "", nil
+	//}
+	out, err := exec.Command("lynx", "--dump", "-nolist", link).Output()
+	if !checkMimeType2(out) {
 		return "", nil
 	}
-	out, err := exec.Command("lynx", "--dump", "-nolist", link).Output()
 	if err != nil {
 		log.Println(err.Error())
 		return "", err
@@ -134,6 +140,18 @@ func checkMimeType(link string) bool {
 
 	if mimeregex.MatchString(string(out)) {
 		return false
+	}
+
+	return true
+}
+
+func checkMimeType2(data []byte) bool {
+	mime := http.DetectContentType(data)
+
+	for _, v := range mimetypes {
+		if v == mime {
+			return false
+		}
 	}
 
 	return true
