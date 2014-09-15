@@ -15,6 +15,7 @@ import (
 )
 
 var urlregex = regexp.MustCompile(`((([A-Za-z]{3,9}:(?:\/\/)?)(?:[-;:&=\+\$,\w]+@)?[A-Za-z0-9.-]+|(?:www.|[-;:&=\+\$,\w]+@)[A-Za-z0-9.-]+)((?:\/[\+~%\/.\w-_]*)?\??(?:[-\+=&;%@.\w_]*)#?(?:[\w]*))?)`)
+var mimeregex = regexp.MustCompile(`(image|video)/(png|gif|webm|jpeg|jpg|avi)`)
 
 type Irc struct {
 	Con      *irc.Connection
@@ -26,7 +27,7 @@ type Irc struct {
 
 func (i *Irc) Run() {
 
-	i.Con = irc.IRC("linkbot", "bowtsie")
+	i.Con = irc.IRC("linkbot_marduk", "bowtsie")
 	i.Con.VerboseCallbackHandler = false
 	i.Con.UseTLS = true
 	if strings.HasPrefix(i.Port, "+") {
@@ -112,12 +113,30 @@ func add(e *irc.Event, i *Irc, q string) {
 }
 
 func getLinkContent(link string) (string, error) {
+
+	if !checkMimeType(link) {
+		return "", nil
+	}
 	out, err := exec.Command("lynx", "--dump", "-nolist", link).Output()
 	if err != nil {
 		log.Println(err.Error())
 		return "", err
 	}
 	return string(out[:]), nil
+}
+
+func checkMimeType(link string) bool {
+	out, err := exec.Command("lynx", "-head", "--dump", link).Output()
+	if err != nil {
+		log.Println(err.Error())
+		return false
+	}
+
+	if mimeregex.MatchString(string(out)) {
+		return false
+	}
+
+	return true
 }
 
 func searchDb(i *Irc, query string) {
